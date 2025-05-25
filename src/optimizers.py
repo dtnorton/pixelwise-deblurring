@@ -22,9 +22,14 @@ def perform_lasso(Y, Z, lmd, kappa):
         # Dimension of the coefficient vector
         K = Z.shape[1]
         Q_ = 2 * kappa * Z.transpose().dot(Z)
-        Q = np.concatenate([np.concatenate([Q_, -Q_]), np.concatenate([-Q_, Q_])], axis=1)
+        Q = np.concatenate(
+            [np.concatenate([Q_, -Q_]), np.concatenate([-Q_, Q_])], axis=1)
         e = np.ones(K)
-        c = np.concatenate([-2 * kappa * Z.transpose().dot(Y) + lmd * e, 2 * kappa * Z.transpose().dot(Y) + lmd * e])  # objective function
+
+        # objective function
+        c = np.concatenate([-2 * kappa * Z.transpose().dot(Y) + lmd * e,
+                           2 * kappa * Z.transpose().dot(Y) + lmd * e])
+
         prob.variables.add(obj=c)
         Qlil = sparse.lil_matrix(Q)
         qmat = [[row, data] for row, data in zip(Qlil.rows, Qlil.data)]
@@ -50,7 +55,8 @@ def perform_lasso(Y, Z, lmd, kappa):
         D_star = np.zeros(K)
         return D_star, {'compute_time': np.inf, 'Q': Q, 'c': c, 'qp_sol': None}
 
-    return D_star, {'compute_time': toc-tic, 'Q': Q, 'c': c, 'qp_sol': qp_sol, 'status': prob.solution.status[prob.solution.get_status()]}
+    return D_star, {'compute_time': toc-tic, 'Q': Q, 'c': c, 'qp_sol': qp_sol,
+                    'status': prob.solution.status[prob.solution.get_status()]}
 
 
 def optim_wrapper(Yj, func, Z, lmd, kappa):

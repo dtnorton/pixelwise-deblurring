@@ -1,0 +1,648 @@
+can you convert python code to matlab for me?
+ChatGPT said:
+ChatGPT
+Yes, I can help convert Python code to MATLAB. Please provide the Python code you'd like me to convert.
+
+
+
+
+
+You said:
+import numpy as np
+from scipy import sparse
+
+
+def _construct_V(t_obs, tau, K):
+    N = t_obs.shape[0]
+    total_time = t_obs[-1] - t_obs[0]
+
+    M = N-1
+    m = 0
+    row = []
+    col = []
+    data = []
+    for i in range(1, N):
+        # add y(t_i), y(t_0) constraint
+        ti_t0 = t_obs[i] - t_obs[0]
+        outer_term_exponent = ti_t0 / tau
+        for k in range(K):
+            lower_limit = np.maximum(k*total_time/(tau*K), 0)
+            upper_limit = np.minimum((k+1)*total_time/(tau*K), ti_t0/tau)
+            if lower_limit < upper_limit:
+                val = np.exp(upper_limit-outer_term_exponent) - np.exp(lower_limit-outer_term_exponent)
+                row.append(m)
+                col.append(k)
+                data.append(val)
+        m += 1
+    assert m == M, "Number of constraints seems to be wrongly calculated"
+    V = sparse.coo_matrix((data, (row, col)), shape=(M, K), dtype=np.float64)
+    return V.tocsr()
+
+
+def _construct_H(haar_level):
+    # Size of H matrix
+    K = np.power(2, haar_level)
+
+    row = []
+    col = []
+    data = []
+
+    # scaling function phi_00
+    for k in range(K):
+        row.append(0)
+        col.append(k)
+        data.append(1)
+
+    # haar wavelets
+    for l in range(1, K):
+        n = np.floor(np.log2(l))
+        k = l - 2**n
+        # this row corresponds to \psi_{n,k} which has support in k/2**n, (k+1)/2**n with half being positive and
+        # other half being negative
+        # NOTE: int is used instead of floor since the indices are all positive numbers
+        idx_min = int(K*k/2**n)
+        idx_mid = int(K*(k+0.5)/2**n)
+        idx_max = int(K*(k+1)/2**n)
+        for m in range(idx_min, idx_mid):
+            row.append(l)
+            col.append(m)
+            data.append(2**(n/2))
+        for m in range(idx_mid, idx_max):
+            row.append(l)
+            col.append(m)
+            data.append(-2**(n/2))
+    H = sparse.coo_matrix((data, (row, col)), shape=(K, K), dtype=np.float64) / np.sqrt(2**haar_level)
+    return H.tocsr()
+
+
+def construct_Y(t_obs, y_obs, tau):
+    #  y_obs are measurements in Kelvin
+
+    assert len(y_obs.shape) == 1, "Each pixel should be independently solved"
+    N = y_obs.shape[0]
+
+    Y = []
+    for i in range(1, N):
+        # add y(t_i), y(t_0) constraint
+        Y.append(y_obs[i] - y_obs[0] * np.exp(-(t_obs[i] - t_obs[0]) / tau))
+    return np.array(Y)
+
+
+def construct_problem_matrices(t_obs, tau, haar_level):
+    # Util function to construct V and H given tau, haar_level and [t_0, t_1, ... , t_N]
+    # t_obs are timestamps of observations in seconds
+    # tau is the thermal time constant of the microbolometer in seconds
+    # haar_level determines time resolution of the estimate i.e [t_0, t_N) is split into 2**haar_level bins
+    # returns: V, H
+
+    assert len(t_obs.shape) == 1 and t_obs.shape[0] >= 2, "At least two observations are required"
+
+    V = _construct_V(t_obs, tau, 2**haar_level)
+    H = _construct_H(haar_level)
+
+    return V, H
+ChatGPT said:
+ChatGPT
+Here's the MATLAB equivalent of the Python code you provided. I've carefully translated the Python code into MATLAB, preserving functionality and logic.
+
+Python To Matlab
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+function V = construct_V(t_obs, tau, K)
+    N = length(t_obs);
+    total_time = t_obs(end) - t_obs(1);
+
+    M = N - 1;
+    m = 0;
+    row = [];
+    col = [];
+    data = [];
+
+    for i = 2:N
+        % Add y(t_i), y(t_0) constraint
+        ti_t0 = t_obs(i) - t_obs(1);
+        outer_term_exponent = ti_t0 / tau;
+        for k = 0:(K-1)
+            lower_limit = max(k * total_time / (tau * K), 0);
+            upper_limit = min((k + 1) * total_time / (tau * K), ti_t0 / tau);
+            if lower_limit < upper_limit
+                val = exp(upper_limit - outer_term_exponent) - exp(lower_limit - outer_term_exponent);
+                row = [row; m];
+                col = [col; k];
+                data = [data; val];
+            end
+        end
+        m = m + 1;
+    end
+
+    assert(m == M, 'Number of constraints seems to be wrongly calculated');
+
+    V = sparse(row, col, data, M, K);
+end
+
+function H = construct_H(haar_level)
+    K = 2^haar_level;
+
+    row = [];
+    col = [];
+    data = [];
+
+    % Scaling function phi_00
+    for k = 1:K
+        row = [row; 1];
+        col = [col; k];
+        data = [data; 1];
+    end
+
+    % Haar wavelets
+    for l = 2:K
+        n = floor(log2(l-1));
+        k = l - 1 - 2^n;
+
+        idx_min = floor(K * k / 2^n) + 1;
+        idx_mid = floor(K * (k + 0.5) / 2^n) + 1;
+        idx_max = floor(K * (k + 1) / 2^n) + 1;
+
+        for m = idx_min:(idx_mid - 1)
+            row = [row; l];
+            col = [col; m];
+            data = [data; 2^(n / 2)];
+        end
+        for m = idx_mid:(idx_max - 1)
+            row = [row; l];
+            col = [col; m];
+            data = [data; -2^(n / 2)];
+        end
+    end
+
+    H = sparse(row, col, data, K, K) / sqrt(2^haar_level);
+end
+
+function Y = construct_Y(t_obs, y_obs, tau)
+    assert(ndims(y_obs) == 2 && size(y_obs, 2) == 1, 'Each pixel should be independently solved');
+
+    N = length(y_obs);
+    Y = [];
+    for i = 2:N
+        % Add y(t_i), y(t_0) constraint
+        Y = [Y; y_obs(i) - y_obs(1) * exp(-(t_obs(i) - t_obs(1)) / tau)];
+    end
+end
+
+function [V, H] = construct_problem_matrices(t_obs, tau, haar_level)
+    assert(isvector(t_obs) && length(t_obs) >= 2, 'At least two observations are required');
+
+    V = construct_V(t_obs, tau, 2^haar_level);
+    H = construct_H(haar_level);
+end
+
+The MATLAB code uses similar logic to the Python implementation. Note that MATLAB arrays are 1-based, so indexing adjustments were made. Functions like sparse replace Python's scipy.sparse functions. Let me know if you need further refinements!
+
+
+
+
+
+You said:
+Thanks, can you convert another python code to matlab for me too, please?
+ChatGPT said:
+ChatGPT
+Of course! Please share the Python code you'd like me to convert, and I'll translate it into MATLAB for you.
+
+
+
+
+
+You said:
+import time
+import numpy as np
+from scipy import sparse
+
+import cplex
+from cplex.exceptions import CplexError
+
+
+def perform_lasso(Y, Z, lmd, kappa):
+    try:
+        prob = cplex.Cplex()
+        prob.set_log_stream(None)
+        prob.set_results_stream(None)
+        prob.set_warning_stream(None)
+        prob.objective.set_sense(prob.objective.sense.minimize)
+
+        # Dimension of the coefficient vector
+        K = Z.shape[1]
+        Q_ = 2 * kappa * Z.transpose().dot(Z)
+        Q = np.concatenate([np.concatenate([Q_, -Q_]), np.concatenate([-Q_, Q_])], axis=1)
+        e = np.ones(K)
+        c = np.concatenate([-2 * kappa * Z.transpose().dot(Y) + lmd * e, 2 * kappa * Z.transpose().dot(Y) + lmd * e])  # objective function
+        prob.variables.add(obj=c)
+        Qlil = sparse.lil_matrix(Q)
+        qmat = [[row, data] for row, data in zip(Qlil.rows, Qlil.data)]
+        prob.objective.set_quadratic(qmat)
+    except CplexError as exc:
+        print(exc)
+        return
+
+    try:
+        tic = time.time()
+        prob.solve()
+        toc = time.time()
+
+        qp_sol = np.array(prob.solution.get_values())
+        # shrink components less than 1e-3*max(qp_sol)
+        # Note: qp_sol is all positive numbers. So no need to take abs
+        qp_sol[qp_sol < 1e-3 * np.max(qp_sol)] = 0
+
+        D_pos = qp_sol[:K]
+        D_neg = qp_sol[K:]
+        D_star = D_pos - D_neg
+    except CplexError as exc:
+        D_star = np.zeros(K)
+        return D_star, {'compute_time': np.inf, 'Q': Q, 'c': c, 'qp_sol': None}
+
+    return D_star, {'compute_time': toc-tic, 'Q': Q, 'c': c, 'qp_sol': qp_sol, 'status': prob.solution.status[prob.solution.get_status()]}
+
+
+def optim_wrapper(Yj, func, Z, lmd, kappa):
+    return Yj[1], func(Yj[0], Z, lmd, kappa)
+ChatGPT said:
+ChatGPT
+Here's the MATLAB equivalent of the Python code you provided, converted to maintain the functionality while using MATLAB syntax and constructs. This includes handling quadratic programming with MATLAB's quadprog or a similar solver, as cplex in Python is specific to IBM ILOG CPLEX.
+
+Lasso To Matlab
+Key Notes:
+Quadratic Programming:
+
+MATLAB's quadprog function is used as a substitute for CPLEX in Python. Make sure to have the Optimization Toolbox installed.
+Matrix Construction:
+
+MATLAB uses 1-based indexing, so adjustments to indices are unnecessary in this case.
+Optimization Options:
+
+The optimoptions function is used to suppress output for a clean operation.
+Error Handling:
+
+Error handling ensures that unexpected solver failures return appropriate default values and metadata.
+Let me know if you need any further explanation or adjustments!
+
+
+
+
+
+You said:
+Thanks.  Can you convert one more python code to matlabe code for me, please?
+ChatGPT said:
+ChatGPT
+Sure! Please share the Python code you'd like me to convert to MATLAB, and I'll assist you with the translation.
+
+
+
+
+
+You said:
+import h5py
+import time
+import tqdm
+import argparse
+import functools
+
+import numpy as np
+from multiprocessing import Pool
+
+from src.utils import construct_problem_matrices, construct_Y
+from src.optimizers import optim_wrapper, perform_lasso
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Regress from T_m to T_m^ss')
+    parser.add_argument('--tau', help='thermal time constant of camera', default=0.011, type=float)
+    parser.add_argument('--n', help='max level of haar wavelets', default=8, type=int)
+    parser.add_argument('--N', help='number of frames used for deblurring', default=33, type=int)
+    parser.add_argument('--T', help='sampling period of camera', default=0.005, type=float)
+    parser.add_argument('--lmd', help='weight for sparsity', default=0.1, type=float)
+    parser.add_argument('--kappa', help='weight for observations', default=0.1, type=float)
+    parser.add_argument('--matfile', help='path to matfile containing image data', required=True, type=str)
+    parser.add_argument('--indices', help='list of indices to deblur', nargs='*', required=True, type=int)
+    parser.add_argument('--output-prefix', help='filename to save the processed frames', required=True, type=str)
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = parse_args()
+
+    with h5py.File(args.matfile, 'r') as data:
+        timestamps = data['t'][0, :] - data['t'][0, 0]  # Creating a local timescale
+        obs_frames = data['frames']
+        num_frames = len(timestamps)
+
+        N = args.N
+        if not int(np.log2(N - 1)) == np.log2(N - 1):
+            print("Warning: Window size ({}) is not of the form 2**l + 1. Unreliable results.".format(N))
+
+        p = Pool()
+        for i in args.indices:
+            print("Processing Frames: [{}, {}]".format(i, i + N))
+            # Note: verify enough frames are available
+            if i + N > num_frames:
+                print("Skipping frame {} since the matfile doesn't have the subsequent N frames".format(i))
+                continue
+
+            obs_t = timestamps[i:i + N]
+            obs_frames_subset = obs_frames[i:i + N, :, :]
+            img_width, img_height = obs_frames_subset.shape[1], obs_frames_subset.shape[2]
+            y_reshaped = obs_frames_subset.reshape((N, -1))
+            y_mean = np.mean(y_reshaped, axis=0)
+
+            # Note: check timestamps are uniformly spaced so
+            # that they align well with the timescale of D
+            # TODO: verify t
+            t_samples = np.linspace(obs_t[0], obs_t[0] + (N - 1) * args.T, num=N)
+            time_offset_flag = False
+            if np.linalg.norm(t_samples - obs_t) > args.T:
+                 time_offset_flag = True
+                 print("Warning: observation timestamps don't seem to be uniformly spaced. Approximation by uniform spacing will affect results")
+
+            V, H = construct_problem_matrices(t_samples, args.tau, args.n)
+            Z = V.dot(H.transpose()).toarray()
+
+            pixels = []
+            for j in range(y_reshaped.shape[1]):
+                Y = construct_Y(t_samples, y_reshaped[:, j] - y_mean[j], args.tau)
+                pixels.append((Y, j))
+            timescale = np.linspace(t_samples[0], t_samples[-1], 2 ** args.n, endpoint=False)
+            x_est = np.zeros((timescale.size, y_reshaped.shape[1]))
+
+            tic = time.time()
+            for j, results in tqdm.tqdm(p.imap_unordered(functools.partial(optim_wrapper, func=perform_lasso, Z=Z, lmd=args.lmd, kappa=args.kappa), pixels), total=len(pixels)):
+                D_est_j = results[0]
+                x_est_j = y_mean[j] + H.transpose().dot(D_est_j)
+                x_est[:, j] = x_est_j
+            toc = time.time()
+            print("Total time taken: {} for {} pixels. Average time taken: {} per pixel".format(toc - tic, len(pixels), (toc-tic)/len(pixels)))
+            est_frames_subset = x_est.reshape([timescale.size, img_width, img_height])
+
+            np.savez("{}_{:06d}_{:06d}".format(args.output_prefix, i, i + N), obs_frames=obs_frames_subset,
+                     est_frames=est_frames_subset, t=t_samples, timescale=timescale)
+ChatGPT said:
+ChatGPT
+Below is the MATLAB equivalent of your Python script. This code leverages MATLAB constructs for argument parsing, file I/O, matrix operations, and parallel processing.
+
+Lasso To Matlab
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+function main()
+    % Parse arguments
+    args = parse_args();
+
+    % Load .mat file
+    data = load(args.matfile);
+    timestamps = data.t(1, :) - data.t(1, 1); % Creating a local timescale
+    obs_frames = data.frames;
+    num_frames = length(timestamps);
+
+    N = args.N;
+    if ~isequal(log2(N - 1), floor(log2(N - 1)))
+        warning('Window size (%d) is not of the form 2^l + 1. Unreliable results.', N);
+    end
+
+    parfor i = 1:length(args.indices)
+        idx = args.indices(i);
+        fprintf('Processing Frames: [%d, %d]\n', idx, idx + N);
+
+        % Verify enough frames are available
+        if idx + N > num_frames
+            fprintf('Skipping frame %d since the matfile does not have the subsequent N frames\n', idx);
+            continue;
+        end
+
+        obs_t = timestamps(idx:idx + N - 1);
+        obs_frames_subset = obs_frames(idx:idx + N - 1, :, :);
+        [img_width, img_height] = size(obs_frames_subset(:, :, 1));
+        y_reshaped = reshape(obs_frames_subset, [N, img_width * img_height]);
+        y_mean = mean(y_reshaped, 1);
+
+        % Check timestamps are uniformly spaced
+        t_samples = linspace(obs_t(1), obs_t(1) + (N - 1) * args.T, N);
+        if norm(t_samples - obs_t) > args.T
+            warning('Observation timestamps do not seem to be uniformly spaced. Approximation by uniform spacing will affect results.');
+        end
+
+        [V, H] = construct_problem_matrices(t_samples, args.tau, args.n);
+        Z = full(V * H');
+
+        pixels = cell(1, size(y_reshaped, 2));
+        for j = 1:size(y_reshaped, 2)
+            Y = construct_Y(t_samples, y_reshaped(:, j) - y_mean(j), args.tau);
+            pixels{j} = {Y, j};
+        end
+
+        timescale = linspace(t_samples(1), t_samples(end), 2^args.n);
+        x_est = zeros(length(timescale), size(y_reshaped, 2));
+
+        tic;
+        parfor j = 1:length(pixels)
+            Yj = pixels{j};
+            results = optim_wrapper(Yj{1}, @perform_lasso, Z, args.lmd, args.kappa);
+            D_est_j = results{1};
+            x_est_j = y_mean(Yj{2}) + H' * D_est_j;
+            x_est(:, Yj{2}) = x_est_j;
+        end
+        toc;
+
+        est_frames_subset = reshape(x_est, [length(timescale), img_width, img_height]);
+        save(sprintf('%s_%06d_%06d.mat', args.output_prefix, idx, idx + N), 'obs_frames_subset', 'est_frames_subset', 't_samples', 'timescale');
+    end
+end
+
+function args = parse_args()
+    p = inputParser;
+    addParameter(p, 'tau', 0.011, @isnumeric);
+    addParameter(p, 'n', 8, @isnumeric);
+    addParameter(p, 'N', 33, @isnumeric);
+    addParameter(p, 'T', 0.005, @isnumeric);
+    addParameter(p, 'lmd', 0.1, @isnumeric);
+    addParameter(p, 'kappa', 0.1, @isnumeric);
+    addParameter(p, 'matfile', '', @ischar);
+    addParameter(p, 'indices', [], @isnumeric);
+    addParameter(p, 'output_prefix', '', @ischar);
+
+    parse(p);
+    args = p.Results;
+end
+
+Edited Lasso To Matlab
+The Python script has been converted into MATLAB code, maintaining functionality and readability. It includes argument parsing, parallel processing using parfor, and file handling for .mat files. Let me know if further refinements are needed!
+
+
+
+
+
+You said:
+Thanks so much!
+ChatGPT said:
+ChatGPT
+You're very welcome! 😊 If you have more code to convert, questions, or need further assistance, feel free to ask. Happy coding! 🚀
